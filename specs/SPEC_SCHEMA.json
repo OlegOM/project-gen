@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TechSpec",
+  "type": "object",
+  "required": [
+    "meta",
+    "stacks"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "name",
+        "domain",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "stacks": {
+      "type": "object",
+      "required": [
+        "backend",
+        "frontend",
+        "database",
+        "infra"
+      ],
+      "properties": {
+        "backend": {
+          "type": "object",
+          "required": [
+            "framework",
+            "lang"
+          ],
+          "properties": {
+            "framework": {
+              "type": "string"
+            },
+            "lang": {
+              "type": "string"
+            },
+            "orm": {
+              "type": "string"
+            },
+            "runtime": {
+              "type": "string"
+            }
+          }
+        },
+        "frontend": {
+          "type": "object",
+          "required": [
+            "framework",
+            "lang"
+          ],
+          "properties": {
+            "framework": {
+              "type": "string"
+            },
+            "lang": {
+              "type": "string"
+            },
+            "ui": {
+              "type": "string"
+            }
+          }
+        },
+        "database": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          }
+        },
+        "infra": {
+          "type": "object",
+          "required": [
+            "orchestrator"
+          ],
+          "properties": {
+            "orchestrator": {
+              "type": "string"
+            },
+            "cloud": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array"
+          }
+        }
+      }
+    },
+    "workflows": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "component": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "acceptance": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "non_functional": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "ci_cd": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true,
+
+  "business_rules": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "required": ["id","target","kind","expr"],
+      "properties": {
+        "id": {"type":"string"},                       // e.g. "BR-0001"
+        "target": {"type":"string"},                   // e.g. "Invoice.total" or "Workflow:Invoice.status"
+        "kind": {"type":"string"},                     // "constraint" | "derivation" | "transition"
+        "expr": {"type":"string"},                     // tiny python-esque expr, e.g. "total >= 0"
+        "message": {"type":"string"}
+      }
+    }
+  },
+  "requirements": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "required": ["id", "text"],
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "component": { "type": "string" },
+        "priority": { "type": "string" },
+        "acceptance": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
