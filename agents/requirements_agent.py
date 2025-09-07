@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, re, json
+import os, re, json, traceback
 from typing import List, Dict, Any
 
 def _mk_id(n:int)->str: return f"R-{n:04d}"
@@ -57,6 +57,7 @@ def extract_requirements(prd_text: str) -> List[Dict[str,Any]]:
             reqs = _llm_extract(prd_text)
             if not reqs: reqs=_heuristic_requirements(prd_text)
         except Exception:
+            traceback.print_exc()
             reqs=_heuristic_requirements(prd_text)
     else:
         reqs=_heuristic_requirements(prd_text)

@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, re, json, yaml
+import os, re, json, yaml, traceback
 from typing import Dict, Any, List
 from projectgen.agents.requirements_agent import extract_requirements
 from projectgen.agents.rules_agent import extract_rules
@@ -39,6 +39,7 @@ def _load_structured(text: str) -> Dict[str, Any]:
         try:
             return json.loads(s)
         except Exception:
+            traceback.print_exc()
             pass
     return yaml.safe_load(s)
 
@@ -46,7 +47,9 @@ def _uniq(seq: List[Any]) -> List[Any]:
     seen = set(); out: List[Any] = []
     for x in seq:
         try: k = json.dumps(x, sort_keys=True)
-        except Exception: k = str(x)
+        except Exception:
+            traceback.print_exc()
+            k = str(x)
         if k not in seen: seen.add(k); out.append(x)
     return out
 
@@ -150,6 +153,7 @@ def _llm_extract(prd_text: str) -> Dict[str, Any]:
             flows = _coerce_workflows(data.get("workflows"))
             return {"entities": ents, "workflows": flows}
         except Exception as e:
+            traceback.print_exc()
             msgs.append({"role":"assistant","content":raw[:1200]})
             msgs.append({"role":"user","content":f"Failed to parse: {e}. Return ONLY a JSON object with 'entities' and 'workflows'."})
     return {"entities": [], "workflows": []}
@@ -164,6 +168,7 @@ def enrich_spec(spec: Dict[str, Any], prd_text: str) -> Dict[str, Any]:
             ents = data.get("entities", []) or []
             flows = data.get("workflows", []) or []
         except Exception:
+            traceback.print_exc()
             ents, flows = [], []
     if not ents: ents = _heuristic_entities(prd_text)
     if not flows: flows = _heuristic_workflows(prd_text)
