@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, re, json, yaml
+import os, re, json, yaml, traceback
 from typing import Any, Dict
 from pathlib import Path
 from jsonschema import validate, ValidationError
@@ -45,6 +45,7 @@ def _load_structured(text: str) -> Dict[str, Any]:
         try:
             return json.loads(s)
         except Exception:
+            traceback.print_exc()
             pass
     return yaml.safe_load(s)
 
@@ -138,10 +139,12 @@ def _llm_prd_to_spec_data(prd_text: str) -> Dict[str, Any]:
         try:
             parsed = json.loads(raw)
         except Exception:
+            traceback.print_exc()
             body = _extract_structured_block(raw)
             try:
                 parsed = json.loads(body)
             except Exception as e:
+                traceback.print_exc()
                 msgs.append({"role":"assistant","content":raw[:1200]})
                 msgs.append({"role":"user","content":f"Not valid JSON: {e}. Return ONE JSON object matching the template keys."})
                 continue
@@ -151,6 +154,7 @@ def _llm_prd_to_spec_data(prd_text: str) -> Dict[str, Any]:
             validate(instance=coerced, schema=schema)
             return coerced
         except ValidationError as e:
+            traceback.print_exc()
             msgs.append({"role":"assistant","content":json.dumps(coerced)[:1200]})
             msgs.append({"role":"user","content":f"Validation failed: {e.message} at path {list(e.path)}. Return ONE JSON object with ALL required fields."})
             continue
@@ -190,6 +194,7 @@ def prd_to_spec(prd_text: str) -> Dict[str, Any]:
         try:
             data = _llm_prd_to_spec_data(prd_text)
         except Exception as e:
+            traceback.print_exc()
             print(f"[spec_agent] LLM failed, fallback to heuristics: {e}")
             data = _heuristic_prd_to_spec(prd_text)
     else:

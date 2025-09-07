@@ -1,6 +1,6 @@
 # projectgen/agents/rules_agent.py
 from __future__ import annotations
-import os, re, json
+import os, re, json, traceback
 from typing import List, Dict, Any
 
 def _mk_id(n:int)->str: return f"BR-{n:04d}"
@@ -152,6 +152,7 @@ PRD:
             out.append(it)
         return out or _heuristic_rules(prd)
     except Exception:
+        traceback.print_exc()
         return _heuristic_rules(prd)
 
 def extract_rules(prd: str) -> List[Dict[str,Any]]:
