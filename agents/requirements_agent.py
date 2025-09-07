@@ -83,10 +83,11 @@ def extract_requirements(prd_text: str) -> List[Dict[str,Any]]:
         k=r["text"].lower()
         if k in seen: continue
         seen.add(k); out.append(r)
-    for i,r in enumerate(out, start=1):
-        if not re.match(r"^R-\d{4}$", r.get("id","")):
-            r["id"]=_mk_id(i)
-        r.setdefault("component","any")
-        r.setdefault("priority","P2")
-        r.setdefault("acceptance",[])
+    for i, r in enumerate(out, start=1):
+        raw_id = r.get("id")
+        if not isinstance(raw_id, str) or not re.match(r"^R-\d{4}$", raw_id):
+            r["id"] = _mk_id(i)
+        r.setdefault("component", "any")
+        r.setdefault("priority", "P2")
+        r.setdefault("acceptance", [])
     return out
