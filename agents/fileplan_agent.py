@@ -42,6 +42,7 @@ def _backend_files(spec: Dict[str, Any]) -> List[PlanFile]:
                 ),
                 PlanFile("backend/app/models/__init__.py", "pkg", [], []),
                 PlanFile("backend/app/routes/__init__.py", "pkg", [], []),
+                PlanFile("backend/app/workflows/__init__.py", "pkg", [], []),
                 PlanFile(
                     "tests/test_health.py",
                     "test",
@@ -68,6 +69,17 @@ def _backend_files(spec: Dict[str, Any]) -> List[PlanFile]:
                     "api",
                     [f"backend/app/models/{ename}.py"],
                     [f"CRUD for {ent['name']}",],
+                )
+            )
+
+        for wf in spec.get("workflows") or []:
+            wname = wf.get("name", "").replace(" ", "_").lower()
+            files.append(
+                PlanFile(
+                    f"backend/app/workflows/{wname}.py",
+                    "workflow",
+                    [],
+                    [f"Workflow for {wf.get('name','')}"],
                 )
             )
 
