@@ -1,4 +1,7 @@
 import typer, pathlib, json
+import re
+from pathlib import Path
+
 from projectgen.agents.spec_agent import prd_to_spec
 from projectgen.agents.spec_enricher import enrich_spec
 from projectgen.agents.fileplan_agent import spec_to_fileplan
@@ -19,9 +22,14 @@ def pipeline(
     spec = enrich_spec(spec, prd_text)
 
     plan = spec_to_fileplan(spec)
-    safe_name = spec["meta"]["name"].replace("/", ":")
-    proj_dir = pathlib.Path(out) / safe_name
+
+    safe_name = re.sub(r'[:/\\]', '_', spec["meta"]["name"])  # → 'Eva AI Agent_PulseCheck'
+    proj_dir = Path(out) / safe_name
     proj_dir.mkdir(parents=True, exist_ok=True)
+
+    # safe_name = spec["meta"]["name"].replace("/", ":")
+    # proj_dir = pathlib.Path(out) / safe_name
+    # proj_dir.mkdir(parents=True, exist_ok=True)
 
     (proj_dir / "docs").mkdir(parents=True, exist_ok=True)
     (proj_dir / "docs" / "PRD.md").write_text(prd_text)
