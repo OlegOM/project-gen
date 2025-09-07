@@ -277,6 +277,7 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
     name = spec["meta"]["name"]
     out = pathlib.Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     files: Dict[str, str] = {}
+    schema_blocks: List[str] = []
 
     _write(out / "backend" / "app" / "__init__.py", "")
     _write(out / "backend" / "app" / "routes" / "__init__.py", "from . import *\n")
@@ -311,8 +312,7 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
                 code = hdr + _render_route(en)
 
                 rules = _rules_for_entity(spec, en["name"])
-                schema_code = _render_schema(en, rules)
-                _write(out / f"backend/app/routes/schemas.py", schema_code)  # one shared file is fine for POC
+                schema_blocks.append(hdr + _render_schema(en, rules))
 
         m_wf = re.match(r"backend/app/workflows/([a-z0-9_]+)\.py$", item["path"])
         if m_wf:
@@ -331,6 +331,12 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
         if item["path"].endswith("infra/docker-compose.yml"): code = _compose(name)
 
         _write(path, code); files[item["path"]] = code
+
+    if schema_blocks:
+        schema_path = out / "backend" / "app" / "routes" / "schemas.py"
+        schema_code = "\n".join(schema_blocks)
+        _write(schema_path, schema_code)
+        files[str(schema_path.relative_to(out))] = schema_code
 
     (out / "docs").mkdir(parents=True, exist_ok=True)
     if prd_text:
