@@ -53,6 +53,15 @@ def _backend_files(spec: Dict[str, Any]) -> List[PlanFile]:
                 PlanFile("pytest.ini", "test_config", [], []),
             ]
         )
+        if spec.get("entities"):
+            files.append(
+                PlanFile(
+                    "backend/app/routes/schemas.py",
+                    "schema",
+                    [],
+                    [],
+                )
+            )
         for ent in spec.get("entities") or []:
             ename = ent["name"].lower()
             files.append(
