@@ -1,0 +1,217 @@
+﻿Eva AI Agent: PulseCheck Ai “Know how your guest feels before they say it.”
+1. Background & Purpose
+Purpose: Predict potential bad reviews before check-out based on guest communication patterns and dynamically launch agentic workflows to mitigate guest dissatisfaction—ensuring higher review scores and fewer complaints.
+As the volume of short-term rental bookings continues to rise, so does the risk of guest dissatisfaction turning into public negative reviews. Reviews directly impact a property's visibility and profitability across platforms like Airbnb, VRBO, and Booking.com. Eva’s PulseCheck is an intelligent AI agent designed to preemptively identify and respond to dissatisfied guests before they check out—when there's still time to recover the experience and avoid reputational damage.
+This agent actively monitors communication from the moment a reservation is made until the check-out date, leveraging advanced sentiment analysis and contextual pattern recognition to evaluate the likelihood of a negative review and overall predict the guest sentiment before the guest says it or leaves a review... If it detects that a guest may be unhappy, it triggers personalized recovery workflows. If it predicts guest is happy, it triggers a personalized review  leaving encouragement workflow These interventions are meant to reassure guests, resolve issues, and either restore guest satisfaction or escalate to a human agent when AI resolution is no longer effective.
+Originally developed to integrate seamlessly with hosteeva, the agent is designed with a modular, API-driven architecture, making it suitable for external deployment with other PMS, CRM, or communication systems. Its core logic, scoring engine, and workflow system can operate independently by connecting to any data stream containing guest interactions—enabling white-label use by third-party customers.
+
+
+________________
+
+
+2. Core Functionality
+Feature
+	Description
+	Guest Sentiment Monitoring
+	Continuously analyze guest messages, calls, inquiries, and requests pre-stay and mid-stay using sentiment analysis + behavior classification.
+	Dynamic Happiness Score
+	Score guest satisfaction on a 0–10 scale. Trigger workflows can be divided to 4 stages: 0-2, 3-6, 7-8, 9-10
+	Real-Time Alerts
+	Notify appropriate agents and leadership? (Customer Experience Agent, Housekeeping, Revenue, etc.) when dissatisfaction trends are detected.
+	Remediation Workflow Engine
+	Launch appropriate workflows based on frustration severity—e.g., offer refund, escalate to a human agent, schedule extra cleaning, provide discount, or send apology messages.
+	Profile Updating Engine
+	Continuously update guest sentiment profile in real time with every new interaction (message, call, support case, etc.). ( can we include a rule that black lists a guest if they have had 2 or 3 (or more) stays with us and have complained on each and every stay. ( when to fire our guests ) 
+	Outcome Tracker
+	Evaluate if happiness score improves after a remediation effort. Track whether guest ended up leaving a review—and its rating.
+	Escalation Trigger
+	When the AI detects that a situation is beyond automated resolution (e.g., emotional escalation, unresolved issues despite action), it flags the case for Human Reputation Agent escalation.
+	Task Generation Engine
+	Every guest-facing interaction from an AI agent is logged as a task, tracked, and visible in task dashboards for audit and performance metrics.
+	________________
+
+
+3. How It Works
+Monitoring Layer
+* Ingests all guest communication channels: SMS, WhatsApp, email, chat, voice call transcript (via Eva Voice AI), Zendesk tickets.
+* Uses Hosteeva's Unified Messaging System and Eva AI Voice logs.
+* Sentiment & intent detection powered by custom-trained NLP models on hospitality communication.
+Happiness Scoring Logic
+* Guest starts with a score of 10.
+* Negative phrases, tone, repeated complaints, lack of engagement, or escalating requests reduce the score.
+* Positive feedback or accepted upsell offers increase the score.
+Trigger Thresholds
+Score
+	Risk Level
+	Workflow Triggered
+	9–10
+	Low
+	Continue normal service
+	7–8
+	Medium
+	Monitor closely; suggest light-touch engagement (e.g. check-in message)
+	5–6
+	High
+	Send “apology + offer to improve stay” message; escalate to human if unresolved
+	<5
+	Critical
+	Trigger strong retention tactic (refund, discount, escalation, etc.)
+	N/A
+	Escalation
+	If AI determines it's unable to resolve the issue (low confidence, unrecognized patterns, aggressive language), auto-escalate to Human Reputation Agent
+	________________
+
+
+4. Sample Remediation Workflows(but configurable)
+Risk Level
+	Sample Agentic Actions
+	Medium
+	Friendly check-in: “We hope you’re loving your stay—if there’s anything we can improve, just let us know!”
+	High
+	“We noticed something may not be perfect—let’s fix it today. Would an extra cleaning or late check-out help?”
+	Critical
+	“We truly apologize for the experience. We’ve issued a $X refund and added a 15% credit for your next stay.”
+	Escalation
+	Notify Human Agent: “This guest may require human intervention due to unresolved concerns or emotional tone escalation. Please review and take control.”
+	All workflows:
+* Log to Hosteeva system.
+* Create a Work Item (type: ReputationRisk) and assign to Hosteeva Reputation Agent.
+* Include link to transcript and summary of detected issues.
+________________
+
+
+5. Example Scenarios
+Scenario 1: Quick Resolution with Refund
+* Guest complains on Airbnb: "The apartment wasn’t cleaned properly."
+* AI assigns happiness score of 5.
+* Agentic response: "We sincerely apologize—this is not our standard. Would a refund of $40 help make things right?"
+* Guest accepts. Refund is issued automatically.
+* Score increases to 8. No review left or a positive one.
+Scenario 2: Negotiated Recovery with Discount and Refund
+* Guest raises multiple issues over 48 hours (slow Wi-Fi, broken lamp, poor communication).
+* Happiness score drops to 4.
+* AI offers a 10% future stay discount → guest not satisfied.
+* AI escalates offer to 20% refund + note of apology.
+* Guest accepts. Issue flagged as resolved. Human intervention avoided.
+Scenario 3: Polite Apology and Offer to Improve
+* Guest comments mid-stay: "The place is okay but not what I expected."
+* AI detects sentiment drop from 9 → 6.
+* Response: "We appreciate the feedback and want to make it better. Could we offer a late check-out or send someone over for a quick refresh?"
+* Guest replies positively, issue is logged, and final review score remains 9.
+Scenario 4: Escalation to Human Reputation Agent
+* Guest sends three aggressive messages expressing dissatisfaction with check-in, cleanliness, and support.
+* Score drops to 3. AI attempts a compensation offer but guest refuses.
+* System triggers escalation: Work Item created and assigned to human agent with transcript and timeline.
+________________
+
+
+6. Metrics Tracked
+Metric
+	Purpose
+	% of guests flagged vs. total guests
+	
+
+	% of flagged guests who received intervention
+	
+
+	Review score change post-intervention
+	
+
+	% of flagged guests who left no review
+	
+
+	Effectiveness of each workflow type
+	
+
+	Avg time from flag → intervention
+	
+
+	# of cases escalated to human reputation agent
+	
+
+	Resolution time for escalated cases
+	
+
+	________________
+
+
+7. History & Audit Trail
+Every interaction is logged and traceable:
+* Timeline of communication, AI decisions, and guest response
+* Record of happiness score changes
+* Workflow steps executed
+* All escalations and resolution actions
+* Accessible history per reservation or guest ID
+* Exportable as audit report for compliance or QA
+________________
+
+
+8. Telemetry & Dashboard
+Dashboard views for admins include:
+* Happiness score distribution across all stays
+* Trendline of average guest satisfaction per month
+* % of issues resolved by AI vs. Human
+* % of resolved cases that led to positive/no review
+* Agent performance stats
+* Conversion rates post-compensation offer
+________________
+
+
+9. Configuration Controls
+Risk-Level Action Configuration
+* Define which actions are permissible at each risk level:
+   * E.g., Medium = apology + follow-up; Critical = refunds up to $100 + future credit
+* Admin UI to set thresholds, cooldowns, escalation timing
+LLM Prompt Configuration per Risk Level
+* Customizable prompt templates by risk level:
+   * Medium: "Write a message that expresses empathy and asks what we can do better."
+   * High: "Offer small compensation and acknowledge inconvenience."
+   * Critical: "Formally apologize and offer 15–25% refund if justified."
+* Prompts can be edited/tested in sandbox
+________________
+
+
+10. System Dependencies & Integrations
+* Eva Voice AI for voice transcription and tone detection
+* Hosteeva Work Items: for ticket updates and visibility
+* Eva CoHost Dashboard for showing happiness score per reservation
+* Eva Action Generator for task/workflow creation
+* Knowledge Base Agent for sending helpful links post-message
+* Eva Inquiry Management Agent for pre-stay concerns that may impact sentiment
+* Human Reputation Agent for handling emotionally complex or unresolved cases
+________________
+
+
+11. Future Enhancements
+* Automatically apply pricing credits, upgrade offers, or housekeeping refreshes based on context.
+* Personalized workflows based on guest profile tags (VIP, repeat guest, etc.)
+* Predict likelihood of public negative review vs. private survey complaint
+________________
+
+
+12. Sample Workflow Diagram
+________________
+
+
+13. Task Tracking & Agent Accountability
+Each agent action is converted into a distinct Task, which includes:
+* Task type (e.g., Message, Offer Refund, Send KB Article, Escalation Notice)
+* Associated guest + reservation
+* Timestamp of execution
+* Outcome status (Pending, Completed, Escalated)
+* Agent (AI or Human) who performed the action
+These tasks are:
+* Logged into the central Task Registry
+* Viewable on the Task Dashboard, with filtering by date, outcome, agent type, and frustration level
+* Used to compute per-agent performance metrics and detect bottlenecks
+* Synced to work items in Zendesk or Jira if applicable
+A Task Lifecycle API is exposed for external system integration or manual override.
+________________
+
+
+🧪 Future Enhancements
+* Automatically apply pricing credits, upgrade offers, or housekeeping refreshes based on context.
+
+* Personalized workflows based on guest profile tags (VIP, repeat guest, etc.)
+
+* Predict likelihood of public negative review vs. private survey complaint.
