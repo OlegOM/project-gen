@@ -1,5 +1,5 @@
 from __future__ import annotations
-import pathlib, json, re
+import pathlib, json, re, os, traceback
 from typing import Dict, Any, List, Tuple
 from projectgen.executor.diff_healer import run_and_heal
 from pydantic import BaseModel, field_validator, ValidationInfo
@@ -16,6 +16,70 @@ def _rules_for_entity(spec, entity_name: str):
         if target.lower().startswith(entity_name.lower()+"."):
             rules.append(r)
     return rules
+
+def _rules_for_workflow(spec, wf_name: str):
+    rules = []
+    for r in spec.get("business_rules", []):
+        target = r.get("target", "").lower()
+        if target.startswith(wf_name.lower()+"."):
+            rules.append(r)
+    return rules
+
+def _requirements_for_entity(spec: Dict[str, Any], entity_name: str) -> List[Dict[str, Any]]:
+    out = []
+    name_l = entity_name.lower()
+    for r in spec.get("requirements", []):
+        if name_l in (r.get("text", "").lower()):
+            out.append(r)
+    return out
+
+def _requirements_for_workflow(spec: Dict[str, Any], wf_name: str) -> List[Dict[str, Any]]:
+    out = []
+    name_l = wf_name.lower()
+    for r in spec.get("requirements", []):
+        if name_l in (r.get("text", "").lower()):
+            out.append(r)
+    return out
+
+def _missing_stack_todos(stacks: Dict[str, Any]) -> List[str]:
+    todos: List[str] = []
+    backend = stacks.get("backend", {})
+    if backend.get("framework", "unspecified") == "unspecified":
+        todos.append("# TODO: specify backend framework in spec")
+    if backend.get("lang", "unspecified") == "unspecified":
+        todos.append("# TODO: specify backend language in spec")
+    return todos
+
+def _llm_workflow_code(flow: Dict[str, Any], reqs, rules, stacks) -> str:
+    import openai
+    prompt = f"""You generate Python functions implementing application workflows.
+Workflow: {json.dumps(flow, indent=2)}
+Relevant requirements: {json.dumps(reqs, indent=2)}
+Business rules: {json.dumps(rules, indent=2)}
+Tech stacks: {json.dumps(stacks, indent=2)}
+Use the stacks when writing code. If information is missing, add comments and TODO notes with recommendations.
+Return only Python code without explanations."""
+    r = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+    )
+    return r["choices"][0]["message"]["content"].strip()
+
+def _llm_route_code(ent: Dict[str, Any], reqs, rules, stacks) -> str:
+    import openai
+    prompt = f"""Implement a FastAPI router for the entity {ent['name']}.
+Requirements: {json.dumps(reqs, indent=2)}
+Business rules: {json.dumps(rules, indent=2)}
+Tech stacks: {json.dumps(stacks, indent=2)}
+Use comments and TODOs if stack information is insufficient.
+Return only Python code."""
+    r = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+    )
+    return r["choices"][0]["message"]["content"].strip()
 
 def _render_schema(ent, rules):
     # Build BaseModel with validators for simple 'field >= 0', 'field in [...]'
@@ -63,11 +127,24 @@ def _render_schema(ent, rules):
 
     return "\n".join(lines) + "\n"
 
-def _render_workflow(flow: Dict[str, Any]) -> str:
+def _render_workflow(flow: Dict[str, Any], spec: Dict[str, Any]) -> str:
     name = _slug(flow.get("name", "workflow"))
+    use_llm = os.getenv("USE_LLM", "false").lower() == "true"
+    reqs = _requirements_for_workflow(spec, flow.get("name", ""))
+    rules = _rules_for_workflow(spec, flow.get("name", ""))
+    stacks = spec.get("stacks", {})
+    todos = _missing_stack_todos(stacks)
+    if use_llm:
+        try:
+            code = _llm_workflow_code(flow, reqs, rules, stacks)
+            if todos:
+                code = "\n".join(todos) + "\n" + code
+            return code if code.endswith("\n") else code+"\n"
+        except Exception:
+            traceback.print_exc()
     trigger = flow.get("trigger", "")
     actions = flow.get("actions", [])
-    lines = [f"def {name}(context: dict) -> None:", f"    \"\"\"Trigger: {trigger}\"\"\""]
+    lines = todos + [f"def {name}(context: dict) -> None:", f"    \"\"\"Trigger: {trigger}\"\"\""]
     if actions:
         lines.append("    # Actions:")
         for act in actions:
@@ -144,26 +221,41 @@ class {name}(Base):
 {body}
 """
 
-def _render_route(ent: Dict[str, Any]) -> str:
+def _render_route(ent: Dict[str, Any], spec: Dict[str, Any]) -> str:
+    use_llm = os.getenv("USE_LLM", "false").lower() == "true"
+    reqs = _requirements_for_entity(spec, ent["name"])
+    rules = _rules_for_entity(spec, ent["name"])
+    stacks = spec.get("stacks", {})
+    todos = _missing_stack_todos(stacks)
+    if use_llm:
+        try:
+            code = _llm_route_code(ent, reqs, rules, stacks)
+            if todos:
+                code = "\n".join(todos) + "\n" + code
+            return code if code.endswith("\n") else code+"\n"
+        except Exception:
+            traceback.print_exc()
     ename = ent["name"]
     lname = ename.lower()
-    return f"""from fastapi import APIRouter
-from typing import List, Dict
-from .schemas import Create{ename}Request
-
-router = APIRouter(prefix='/{lname}s', tags=['{ename}'])
-_DB: List[Dict] = []
-
-@router.get('', response_model=List[Dict])
-def list_{lname}s():
-    return _DB
-
-@router.post('', response_model=Dict)
-def create_{lname}(item: Create{ename}Request):
-    d = item.model_dump()
-    _DB.append(d)
-    return d
-"""
+    lines = todos + [
+        "from fastapi import APIRouter",
+        "from typing import List, Dict",
+        f"from .schemas import Create{ename}Request",
+        "",
+        f"router = APIRouter(prefix='/{lname}s', tags=['{ename}'])",
+        "_DB: List[Dict] = []",
+        "",
+        f"@router.get('', response_model=List[Dict])",
+        f"def list_{lname}s():",
+        "    return _DB",
+        "",
+        f"@router.post('', response_model=Dict)",
+        f"def create_{lname}(item: Create{ename}Request):",
+        "    d = item.model_dump()",
+        "    _DB.append(d)",
+        "    return d",
+    ]
+    return "\n".join(lines) + "\n"
 
 def _frontend_index_html() -> str:
     return """<!doctype html>
@@ -309,7 +401,7 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
             en = next((e for e in spec.get("entities", []) if e["name"].lower() == base), None)
             if en:
                 hdr = _req_header(_match_req_ids(spec, en["name"]))
-                code = hdr + _render_route(en)
+                code = hdr + _render_route(en, spec)
 
                 rules = _rules_for_entity(spec, en["name"])
                 schema_blocks.append(hdr + _render_schema(en, rules))
@@ -319,7 +411,7 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
             wf = next((w for w in spec.get("workflows", []) if _slug(w.get("name", "")) == m_wf.group(1)), None)
             if wf:
                 hdr = _req_header(_match_req_ids(spec, wf.get("name", "")))
-                code = hdr + _render_workflow(wf)
+                code = hdr + _render_workflow(wf, spec)
 
 
         if item["path"].endswith("frontend/index.html"): code = _frontend_index_html()
