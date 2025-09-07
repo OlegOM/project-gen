@@ -55,6 +55,14 @@ def _missing_stack_todos(stacks: Dict[str, Any]) -> List[str]:
         todos.append("# TODO: specify backend language in spec")
     return todos
 
+def _strip_code_fences(code: str) -> str:
+    code = code.strip()
+    if code.startswith("```"):
+        code = re.sub(r"^```[a-zA-Z0-9_]*\n", "", code)
+    if code.endswith("```"):
+        code = re.sub(r"\n```$", "", code)
+    return code
+
 def _llm_workflow_code(flow: Dict[str, Any], reqs, rules, stacks) -> str:
     import openai
     prompt = f"""You generate Python functions implementing application workflows.
@@ -69,7 +77,7 @@ Return only Python code without explanations."""
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
-    return r["choices"][0]["message"]["content"].strip()
+    return _strip_code_fences(r["choices"][0]["message"]["content"])
 
 def _llm_route_code(ent: Dict[str, Any], reqs, rules, stacks) -> str:
     import openai
@@ -84,7 +92,7 @@ Return only Python code."""
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
-    return r["choices"][0]["message"]["content"].strip()
+    return _strip_code_fences(r["choices"][0]["message"]["content"])
 
 def _render_schema(ent, rules):
     # Build BaseModel with validators for simple 'field >= 0', 'field in [...]'
