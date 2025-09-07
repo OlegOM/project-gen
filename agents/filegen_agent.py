@@ -25,19 +25,26 @@ def _rules_for_workflow(spec, wf_name: str):
             rules.append(r)
     return rules
 
+
+def _token_overlap(name: str, text: str) -> float:
+    name_tokens = set(re.findall(r"\w+", name.lower()))
+    if not name_tokens:
+        return 0.0
+    text_tokens = set(re.findall(r"\w+", text.lower()))
+    return len(name_tokens & text_tokens) / len(name_tokens)
+
 def _requirements_for_entity(spec: Dict[str, Any], entity_name: str) -> List[Dict[str, Any]]:
     out = []
-    name_l = entity_name.lower()
     for r in spec.get("requirements", []):
-        if name_l in (r.get("text", "").lower()):
+        if _token_overlap(entity_name, r.get("text", "")) >= 0.3:
             out.append(r)
     return out
 
+
 def _requirements_for_workflow(spec: Dict[str, Any], wf_name: str) -> List[Dict[str, Any]]:
     out = []
-    name_l = wf_name.lower()
     for r in spec.get("requirements", []):
-        if name_l in (r.get("text", "").lower()):
+        if _token_overlap(wf_name, r.get("text", "")) >= 0.3:
             out.append(r)
     return out
 
