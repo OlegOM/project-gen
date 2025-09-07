@@ -38,16 +38,31 @@ PRD:
         raw = raw[4:].strip()
     data=_json.loads(raw)
     out=[]; c=1
+
+    # The OpenAI "json_object" response format can wrap the array we expect
+    # inside an object (e.g. {"requirements": [...]}) or even return a single
+    # requirement object.  Normalize that here so downstream logic always
+    # iterates over a list of requirement dicts.
+    items: List[Dict[str, Any]] = []
     if isinstance(data, list):
-        for d in data:
-            if not isinstance(d, dict) or not d.get("text"): continue
-            out.append({
-                "id": d.get("id", _mk_id(c)),
-                "text": d["text"].strip(),
-                "component": d.get("component","any"),
-                "priority": d.get("priority","P2"),
-                "acceptance": d.get("acceptance",[]) if isinstance(d.get("acceptance"), list) else []
-            }); c+=1
+        items = data
+    elif isinstance(data, dict):
+        if isinstance(data.get("requirements"), list):
+            items = data["requirements"]
+        else:
+            items = [data]
+
+    for d in items:
+        if not isinstance(d, dict) or not d.get("text"):
+            continue
+        out.append({
+            "id": d.get("id", _mk_id(c)),
+            "text": d["text"].strip(),
+            "component": d.get("component","any"),
+            "priority": d.get("priority","P2"),
+            "acceptance": d.get("acceptance",[]) if isinstance(d.get("acceptance"), list) else []
+        })
+        c+=1
     return out
 
 def extract_requirements(prd_text: str) -> List[Dict[str,Any]]:
