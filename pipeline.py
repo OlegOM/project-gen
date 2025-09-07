@@ -19,7 +19,8 @@ def pipeline(
     spec = enrich_spec(spec, prd_text)
 
     plan = spec_to_fileplan(spec)
-    proj_dir = pathlib.Path(out) / spec["meta"]["name"]
+    safe_name = spec["meta"]["name"].replace("/", ":")
+    proj_dir = pathlib.Path(out) / safe_name
     proj_dir.mkdir(parents=True, exist_ok=True)
 
     (proj_dir / "docs").mkdir(parents=True, exist_ok=True)
