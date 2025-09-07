@@ -27,10 +27,6 @@ def pipeline(
     proj_dir = Path(out) / safe_name
     proj_dir.mkdir(parents=True, exist_ok=True)
 
-    # safe_name = spec["meta"]["name"].replace("/", ":")
-    # proj_dir = pathlib.Path(out) / safe_name
-    # proj_dir.mkdir(parents=True, exist_ok=True)
-
     (proj_dir / "docs").mkdir(parents=True, exist_ok=True)
     (proj_dir / "docs" / "PRD.md").write_text(prd_text)
 

@@ -60,7 +60,7 @@ Tech stacks: {json.dumps(stacks, indent=2)}
 Use the stacks when writing code. If information is missing, add comments and TODO notes with recommendations.
 Return only Python code without explanations."""
     r = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
@@ -75,7 +75,7 @@ Tech stacks: {json.dumps(stacks, indent=2)}
 Use comments and TODOs if stack information is insufficient.
 Return only Python code."""
     r = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
