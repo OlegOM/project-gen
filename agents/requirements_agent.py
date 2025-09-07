@@ -21,12 +21,22 @@ def _heuristic_requirements(prd: str)->List[Dict[str,Any]]:
 
 def _llm_extract(prd_text: str) -> List[Dict[str, Any]]:
     import openai, json as _json
-    prompt=f"""Return ONLY JSON array of requirements with fields id|text|component|priority|acceptance.
+    prompt=f"""Return ONLY a JSON array of requirements with fields id|text|component|priority|acceptance.
 Keep each requirement atomic and testable. If any field is unknown, omit it (caller fills defaults).
+No markdown or code fences.
 PRD:
 {prd_text}"""
-    r=openai.ChatCompletion.create(model="gpt-4o-mini",messages=[{"role":"user","content":prompt}],temperature=0)
-    data=_json.loads(r["choices"][0]["message"]["content"])
+    r=openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role":"user","content":prompt}],
+        temperature=0,
+        response_format={"type":"json_object"},
+    )
+    raw = r["choices"][0]["message"]["content"]
+    raw = raw.strip().strip("`")
+    if raw.lower().startswith("json"):
+        raw = raw[4:].strip()
+    data=_json.loads(raw)
     out=[]; c=1
     if isinstance(data, list):
         for d in data:
