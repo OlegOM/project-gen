@@ -6,7 +6,8 @@ from pydantic import BaseModel, field_validator, ValidationInfo
 
 _TEXT_EXTS = {".py",".txt",".ini",".cfg",".env",".yml",".yaml",".md",".html",".tsx",".ts",".js",".json"}
 
-from pydantic import BaseModel, field_validator, ValidationInfo
+def _slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9_]+", "_", name.strip().lower())
 
 def _rules_for_entity(spec, entity_name: str):
     rules = []
@@ -60,6 +61,18 @@ def _render_schema(ent, rules):
                 f"        return v",
             ]
 
+    return "\n".join(lines) + "\n"
+
+def _render_workflow(flow: Dict[str, Any]) -> str:
+    name = _slug(flow.get("name", "workflow"))
+    trigger = flow.get("trigger", "")
+    actions = flow.get("actions", [])
+    lines = [f"def {name}(context: dict) -> None:", f"    \"\"\"Trigger: {trigger}\"\"\""]
+    if actions:
+        lines.append("    # Actions:")
+        for act in actions:
+            lines.append(f"    # - {act}")
+    lines.append("    pass")
     return "\n".join(lines) + "\n"
 
 def _write(p: pathlib.Path, content: str):
@@ -233,6 +246,33 @@ def test_{rid}_{i}():
         out.append((f"tests/requirements/test_{rid}_{i}.py", code))
     return out
 
+def _doc_workflows(flows: List[Dict[str, Any]]) -> str:
+    lines = ["# Workflows"]
+    for f in flows or []:
+        lines.append(f"## {f.get('name','')}")
+        if f.get("trigger"):
+            lines.append(f"*Trigger:* {f['trigger']}")
+        for act in f.get("actions", []) or []:
+            lines.append(f"- {act}")
+    return "\n".join(lines) + "\n"
+
+def _doc_requirements(reqs: List[Dict[str, Any]]) -> str:
+    lines = ["# Requirements"]
+    for r in reqs or []:
+        lines.append(f"## {r.get('id','')}")
+        lines.append(r.get("text", ""))
+        if r.get("acceptance"):
+            lines.append("### Acceptance Criteria")
+            for a in r["acceptance"]:
+                lines.append(f"- {a}")
+    return "\n".join(lines) + "\n"
+
+def _doc_rules(rules: List[Dict[str, Any]]) -> str:
+    lines = ["# Business Rules"]
+    for r in rules or []:
+        lines.append(f"- {r.get('id','')}: {r.get('target','')} {r.get('expr','')}")
+    return "\n".join(lines) + "\n"
+
 def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd_text: str | None = None) -> Dict[str, str]:
     name = spec["meta"]["name"]
     out = pathlib.Path(out_dir); out.mkdir(parents=True, exist_ok=True)
@@ -241,6 +281,7 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
     _write(out / "backend" / "app" / "__init__.py", "")
     _write(out / "backend" / "app" / "routes" / "__init__.py", "from . import *\n")
     _write(out / "backend" / "app" / "models" / "__init__.py", "")
+    _write(out / "backend" / "app" / "workflows" / "__init__.py", "")
 
     for item in plan["files"]:
         path = out / item["path"]; code = "// TODO"
@@ -273,6 +314,13 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
                 schema_code = _render_schema(en, rules)
                 _write(out / f"backend/app/routes/schemas.py", schema_code)  # one shared file is fine for POC
 
+        m_wf = re.match(r"backend/app/workflows/([a-z0-9_]+)\.py$", item["path"])
+        if m_wf:
+            wf = next((w for w in spec.get("workflows", []) if _slug(w.get("name", "")) == m_wf.group(1)), None)
+            if wf:
+                hdr = _req_header(_match_req_ids(spec, wf.get("name", "")))
+                code = hdr + _render_workflow(wf)
+
 
         if item["path"].endswith("frontend/index.html"): code = _frontend_index_html()
         elif item["path"].endswith("frontend/src/main.tsx"): code = _frontend_main_tsx(name)
@@ -288,11 +336,13 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
     if prd_text:
         _write(out / "docs" / "PRD.md", prd_text)
     _write(out / "docs" / "spec.json", json.dumps(spec, indent=2))
+    _write(out / "docs" / "workflows.md", _doc_workflows(spec.get("workflows", [])))
+    _write(out / "docs" / "requirements.md", _doc_requirements(spec.get("requirements", [])))
+    _write(out / "docs" / "business_rules.md", _doc_rules(spec.get("business_rules", [])))
 
     for req in spec.get("requirements", []):
         for path, code in _acceptance_to_tests(req):
             _write(out / path, code)
             files[path] = code
-
     run_and_heal(str(out))
     return files
