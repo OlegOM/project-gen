@@ -142,11 +142,28 @@ PRD:
         raw = raw[4:].strip()
     try:
         arr = _json.loads(raw)
+        # allow the model to return either a bare array or an object
+        items: List[Any] = []
+        if isinstance(arr, list):
+            items = arr
+        elif isinstance(arr, dict):
+            # common case: {"rules": [...]}
+            if isinstance(arr.get("rules"), list):
+                items = arr["rules"]
+            else:
+                # fall back to first list-valued field
+                for v in arr.values():
+                    if isinstance(v, list):
+                        items = v
+                        break
         # backfill ids if missing
-        out=[]; c=1
-        for it in arr if isinstance(arr, list) else []:
-            if not isinstance(it, dict) or not it.get("expr"): continue
-            it.setdefault("id", _mk_id(c)); c+=1
+        out: List[Dict[str, Any]] = []
+        c = 1
+        for it in items:
+            if not isinstance(it, dict) or not it.get("expr"):
+                continue
+            it.setdefault("id", _mk_id(c))
+            c += 1
             it.setdefault("kind", "constraint")
             it.setdefault("message", "")
             out.append(it)
