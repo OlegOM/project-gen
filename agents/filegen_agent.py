@@ -12,16 +12,14 @@ def _slug(name: str) -> str:
 def _rules_for_entity(spec, entity_name: str):
     rules = []
     for r in spec.get("business_rules", []):
-        target = r.get("target","")
-        if target.lower().startswith(entity_name.lower()+"."):
+        if _token_overlap(entity_name, r.get("target", "")) >= 0.3:
             rules.append(r)
     return rules
 
 def _rules_for_workflow(spec, wf_name: str):
     rules = []
     for r in spec.get("business_rules", []):
-        target = r.get("target", "").lower()
-        if target.startswith(wf_name.lower()+"."):
+        if _token_overlap(wf_name, r.get("target", "")) >= 0.3:
             rules.append(r)
     return rules
 
