@@ -127,11 +127,21 @@ def _llm_rules(prd: str) -> List[Dict[str,Any]]:
     prompt = f"""Extract atomic business rules as JSON:
 [{{"id":"BR-0001","target":"Invoice.total","kind":"constraint|derivation|transition","expr":"python-like expression","message":"..." }}, ...]
 Rules must be testable and refer to concrete entity fields.
+Return ONLY a JSON array, no markdown.
 PRD:
 {prd}"""
-    r = openai.ChatCompletion.create(model="gpt-4o-mini", messages=[{"role":"user","content":prompt}], temperature=0)
+    r = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+        response_format={"type": "json_object"},
+    )
+    raw = r["choices"][0]["message"]["content"]
+    raw = raw.strip().strip("`")
+    if raw.lower().startswith("json"):
+        raw = raw[4:].strip()
     try:
-        arr = _json.loads(r["choices"][0]["message"]["content"])
+        arr = _json.loads(raw)
         # backfill ids if missing
         out=[]; c=1
         for it in arr if isinstance(arr, list) else []:

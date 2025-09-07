@@ -128,7 +128,12 @@ def _llm_prd_to_spec_data(prd_text: str) -> Dict[str, Any]:
 
     msgs = [{"role":"system","content":system},{"role":"user","content":user}]
     for _ in range(3):
-        resp = openai.ChatCompletion.create(model="gpt-4o-mini", messages=msgs, temperature=0)
+        resp = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=msgs,
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
         raw = resp["choices"][0]["message"]["content"]
         try:
             parsed = json.loads(raw)

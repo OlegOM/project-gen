@@ -129,15 +129,19 @@ def _ensure_health(flows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def _llm_extract(prd_text: str) -> Dict[str, Any]:
     import openai
     system = (
-        "Output ONLY one structured block (prefer JSON) describing entities and workflows. "
-        "No prose, no Markdown, no fences. Keys:\n"
+        "Return ONLY a single JSON object (no markdown) describing entities and workflows. Keys:\n"
         "entities: [ { name: str, fields: [ { name: str, type: str, pk?: bool, unique?: bool, fk?: str } ] } ]\n"
         "workflows: [ { name: str, trigger: str, actions: [str,...] } ]"
     )
-    user = f"PRD:\n{prd_text}\n\nReturn a single JSON object (preferred) or YAML with keys: entities, workflows."
+    user = f"PRD:\n{prd_text}\n\nOutput: ONE JSON object with keys 'entities' and 'workflows'."
     msgs = [{"role":"system","content":system},{"role":"user","content":user}]
     for _ in range(3):
-        resp = openai.ChatCompletion.create(model="gpt-4o-mini", messages=msgs, temperature=0)
+        resp = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=msgs,
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
         raw = resp["choices"][0]["message"]["content"]
         body = _extract_structured_block(raw)
         try:
