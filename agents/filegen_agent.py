@@ -3,6 +3,10 @@ import pathlib, json, re, os, traceback
 from typing import Dict, Any, List, Tuple
 from projectgen.executor.diff_healer import run_and_heal
 from pydantic import BaseModel, field_validator, ValidationInfo
+import re
+from nltk.stem import LancasterStemmer
+
+stemmer = LancasterStemmer()
 
 _TEXT_EXTS = {".py",".txt",".ini",".cfg",".env",".yml",".yaml",".md",".html",".tsx",".ts",".js",".json"}
 
@@ -19,18 +23,31 @@ def _rules_for_entity(spec, entity_name: str):
 def _rules_for_workflow(spec, wf_name: str):
     rules = []
     for r in spec.get("business_rules", []):
-        if _token_overlap(wf_name, r.get("target", "")) >= 0.3:
+        if _token_overlap(wf_name, f'{r.get("target", "")} {r.get("message", "")}') >= 0.3:
             rules.append(r)
     return rules
 
 
-def _token_overlap(name: str, text: str) -> float:
+def _token_overlap_prev(name: str, text: str) -> float:
     name_tokens = set(re.findall(r"\w+", name.lower()))
     if not name_tokens:
         return 0.0
     text_tokens = set(re.findall(r"\w+", text.lower()))
     intersect = name_tokens & text_tokens
     return len(intersect) / len(name_tokens)
+
+def _token_overlap(name: str, text: str) -> float:
+    name_tokens = re.findall(r"\w+", name.lower())
+    if not name_tokens:
+        return 0.0
+    text_tokens = re.findall(r"\w+", text.lower())
+
+    # normalize each token to its root form
+    name_roots = {stemmer.stem(tok) for tok in name_tokens}
+    text_roots = {stemmer.stem(tok) for tok in text_tokens}
+
+    intersect = name_roots & text_roots
+    return len(intersect) / len(name_roots)
 
 def _requirements_for_entity(spec: Dict[str, Any], entity_name: str) -> List[Dict[str, Any]]:
     out = []
