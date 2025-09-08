@@ -81,15 +81,21 @@ def _strip_code_fences(code: str) -> str:
         code = re.sub(r"\n```$", "", code)
     return code
 
-def _llm_workflow_code(flow: Dict[str, Any], reqs, rules, stacks) -> str:
+def _llm_workflow_code(flow: Dict[str, Any], reqs, rules, stacks, prd_text: str | None = None) -> str:
     import openai
-    prompt = f"""You generate Python functions implementing application workflows.
-Workflow: {json.dumps(flow, indent=2)}
-Relevant requirements: {json.dumps(reqs, indent=2)}
-Business rules: {json.dumps(rules, indent=2)}
-Tech stacks: {json.dumps(stacks, indent=2)}
-Use the stacks when writing code. If information is missing, add comments and TODO notes with recommendations.
-Return only Python code without explanations."""
+    prompt = (
+        "You generate Python functions implementing application workflows.\n"
+        f"Workflow: {json.dumps(flow, indent=2)}\n"
+        f"Relevant requirements: {json.dumps(reqs, indent=2)}\n"
+        f"Business rules: {json.dumps(rules, indent=2)}\n"
+        f"Tech stacks: {json.dumps(stacks, indent=2)}\n"
+    )
+    if prd_text:
+        prompt += f"Original PRD:\n{prd_text}\n"
+    prompt += (
+        "Use the stacks when writing code. If information is missing, add comments and TODO notes with recommendations.\n"
+        "Return only Python code without explanations."
+    )
     r = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
@@ -97,14 +103,17 @@ Return only Python code without explanations."""
     )
     return _strip_code_fences(r["choices"][0]["message"]["content"])
 
-def _llm_route_code(ent: Dict[str, Any], reqs, rules, stacks) -> str:
+def _llm_route_code(ent: Dict[str, Any], reqs, rules, stacks, prd_text: str | None = None) -> str:
     import openai
-    prompt = f"""Implement a FastAPI router for the entity {ent['name']}.
-Requirements: {json.dumps(reqs, indent=2)}
-Business rules: {json.dumps(rules, indent=2)}
-Tech stacks: {json.dumps(stacks, indent=2)}
-Use comments and TODOs if stack information is insufficient.
-Return only Python code."""
+    prompt = (
+        f"Implement a FastAPI router for the entity {ent['name']}.\n"
+        f"Requirements: {json.dumps(reqs, indent=2)}\n"
+        f"Business rules: {json.dumps(rules, indent=2)}\n"
+        f"Tech stacks: {json.dumps(stacks, indent=2)}\n"
+    )
+    if prd_text:
+        prompt += f"Original PRD:\n{prd_text}\n"
+    prompt += "Use comments and TODOs if stack information is insufficient.\nReturn only Python code."
     r = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
@@ -158,7 +167,7 @@ def _render_schema(ent, rules):
 
     return "\n".join(lines) + "\n"
 
-def _render_workflow(flow: Dict[str, Any], spec: Dict[str, Any]) -> str:
+def _render_workflow(flow: Dict[str, Any], spec: Dict[str, Any], prd_text: str | None = None) -> str:
     name = _slug(flow.get("name", "workflow"))
     use_llm = os.getenv("USE_LLM", "false").lower() == "true"
     reqs = _requirements_for_workflow(spec, flow.get("name", ""))
@@ -167,10 +176,10 @@ def _render_workflow(flow: Dict[str, Any], spec: Dict[str, Any]) -> str:
     todos = _missing_stack_todos(stacks)
     if use_llm:
         try:
-            code = _llm_workflow_code(flow, reqs, rules, stacks)
+            code = _llm_workflow_code(flow, reqs, rules, stacks, prd_text)
             if todos:
                 code = "\n".join(todos) + "\n" + code
-            return code if code.endswith("\n") else code+"\n"
+            return code if code.endswith("\n") else code + "\n"
         except Exception:
             traceback.print_exc()
     trigger = flow.get("trigger", "")
@@ -252,7 +261,7 @@ class {name}(Base):
 {body}
 """
 
-def _render_route(ent: Dict[str, Any], spec: Dict[str, Any]) -> str:
+def _render_route(ent: Dict[str, Any], spec: Dict[str, Any], prd_text: str | None = None) -> str:
     use_llm = os.getenv("USE_LLM", "false").lower() == "true"
     reqs = _requirements_for_entity(spec, ent["name"])
     rules = _rules_for_entity(spec, ent["name"])
@@ -260,10 +269,10 @@ def _render_route(ent: Dict[str, Any], spec: Dict[str, Any]) -> str:
     todos = _missing_stack_todos(stacks)
     if use_llm:
         try:
-            code = _llm_route_code(ent, reqs, rules, stacks)
+            code = _llm_route_code(ent, reqs, rules, stacks, prd_text)
             if todos:
                 code = "\n".join(todos) + "\n" + code
-            return code if code.endswith("\n") else code+"\n"
+            return code if code.endswith("\n") else code + "\n"
         except Exception:
             traceback.print_exc()
     ename = ent["name"]
@@ -432,7 +441,7 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
             en = next((e for e in spec.get("entities", []) if e["name"].lower() == base), None)
             if en:
                 hdr = _req_header(_match_req_ids(spec, en["name"]))
-                code = hdr + _render_route(en, spec)
+                code = hdr + _render_route(en, spec, prd_text)
 
                 rules = _rules_for_entity(spec, en["name"])
                 schema_blocks.append(hdr + _render_schema(en, rules))
@@ -442,7 +451,7 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
             wf = next((w for w in spec.get("workflows", []) if _slug(w.get("name", "")) == m_wf.group(1)), None)
             if wf:
                 hdr = _req_header(_match_req_ids(spec, wf.get("name", "")))
-                code = hdr + _render_workflow(wf, spec)
+                code = hdr + _render_workflow(wf, spec, prd_text)
 
 
         if item["path"].endswith("frontend/index.html"): code = _frontend_index_html()
