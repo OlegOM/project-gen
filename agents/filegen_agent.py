@@ -82,44 +82,84 @@ def _strip_code_fences(code: str) -> str:
     return code
 
 def _llm_workflow_code(flow: Dict[str, Any], reqs, rules, stacks, prd_text: str | None = None) -> str:
+    """Generate workflow code using a two-step LLM prompting pipeline."""
     import openai
+
+    # Step 1: have the LLM craft an expanded prompt for code generation
     prompt = (
-        "You generate Python functions implementing application workflows.\n"
-        f"Workflow: {json.dumps(flow, indent=2)}\n"
+        "Please generate prompt which will be used as a prompt for result file generation.\n"
+        f"The Workflow summary: {json.dumps(flow, indent=2)}\n"
         f"Relevant requirements: {json.dumps(reqs, indent=2)}\n"
-        f"Business rules: {json.dumps(rules, indent=2)}\n"
+        f"Business rules summary: {json.dumps(rules, indent=2)}\n"
         f"Tech stacks: {json.dumps(stacks, indent=2)}\n"
     )
     if prd_text:
         prompt += f"Original PRD:\n{prd_text}\n"
     prompt += (
-        "Use the stacks when writing code. If information is missing, add comments and TODO notes with recommendations.\n"
-        "Return only Python code without explanations."
+        "Using these Workflows, requirements and business rules - please generate instructions to create python files, this instruction will be used on next LLM step.\n"
+        "Also Workflows, requirements and business rules - should be used as bullets which should be enhanced to more comprehensive flows, requirements and rules.\n"
+        "So result prompt should contain more advanced information about Workflows, requirements and business rules.\n"
+        "LLM should provide enhanced Workflows, requirements and business rules based on input Workflows, requirements and business rules.\n"
+        "So main Idea of current prompt should be: 1. To create more Workflows, requirements and business rules based on given. 2. Create prompt for next step LLM generation.\n"
     )
-    r = openai.ChatCompletion.create(
+
+    r1 = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
-    return _strip_code_fences(r["choices"][0]["message"]["content"])
+
+    step_prompt = r1["choices"][0]["message"]["content"]
+
+    # Step 2: generate the actual workflow code from the crafted prompt
+    step_prompt += "\nReturn only Python code without explanations."
+    r2 = openai.ChatCompletion.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": step_prompt}],
+        temperature=0,
+    )
+
+    return _strip_code_fences(r2["choices"][0]["message"]["content"])
 
 def _llm_route_code(ent: Dict[str, Any], reqs, rules, stacks, prd_text: str | None = None) -> str:
+    """Generate router code using a two-step LLM prompting pipeline."""
     import openai
+
+    # Step 1: have the LLM craft an expanded prompt for code generation
     prompt = (
-        f"Implement a FastAPI router for the entity {ent['name']}.\n"
-        f"Requirements: {json.dumps(reqs, indent=2)}\n"
-        f"Business rules: {json.dumps(rules, indent=2)}\n"
+        "Please generate prompt which will be used as a prompt for result file generation.\n"
+        f"The Entity summary: {json.dumps(ent, indent=2)}\n"
+        f"Relevant requirements: {json.dumps(reqs, indent=2)}\n"
+        f"Business rules summary: {json.dumps(rules, indent=2)}\n"
         f"Tech stacks: {json.dumps(stacks, indent=2)}\n"
     )
     if prd_text:
         prompt += f"Original PRD:\n{prd_text}\n"
-    prompt += "Use comments and TODOs if stack information is insufficient.\nReturn only Python code."
-    r = openai.ChatCompletion.create(
+    prompt += (
+        "Using these entity details, requirements and business rules - please generate instructions to create python files for a FastAPI router, this instruction will be used on next LLM step.\n"
+        "Also requirements and business rules should be used as bullets which should be enhanced to more comprehensive ones.\n"
+        "So result prompt should contain more advanced information about the entity, requirements and business rules.\n"
+        "LLM should provide enhanced requirements and business rules based on input requirements and business rules.\n"
+        "So main Idea of current prompt should be: 1. To create more requirements and business rules based on given. 2. Create prompt for next step LLM generation.\n"
+    )
+
+    r1 = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
-    return _strip_code_fences(r["choices"][0]["message"]["content"])
+
+    step_prompt = r1["choices"][0]["message"]["content"]
+
+    # Step 2: generate the actual router code from the crafted prompt
+    step_prompt += "\nUse comments and TODOs if stack information is insufficient.\nReturn only Python code without explanations."
+    r2 = openai.ChatCompletion.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": step_prompt}],
+        temperature=0,
+    )
+
+    return _strip_code_fences(r2["choices"][0]["message"]["content"])
 
 def _render_schema(ent, rules):
     # Build BaseModel with validators for simple 'field >= 0', 'field in [...]'
