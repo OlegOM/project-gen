@@ -29,7 +29,8 @@ def _token_overlap(name: str, text: str) -> float:
     if not name_tokens:
         return 0.0
     text_tokens = set(re.findall(r"\w+", text.lower()))
-    return len(name_tokens & text_tokens) / len(name_tokens)
+    intersect = name_tokens & text_tokens
+    return len(intersect) / len(name_tokens)
 
 def _requirements_for_entity(spec: Dict[str, Any], entity_name: str) -> List[Dict[str, Any]]:
     out = []
