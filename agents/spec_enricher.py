@@ -159,6 +159,7 @@ def _llm_extract(prd_text: str) -> Dict[str, Any]:
     return {"entities": [], "workflows": []}
 
 def enrich_spec(spec: Dict[str, Any], prd_text: str) -> Dict[str, Any]:
+    print (f'Enriching the SPEC')
     use_llm = os.getenv("USE_LLM","false").lower()=="true"
     ents: List[Dict[str, Any]] = []
     flows: List[Dict[str, Any]] = []

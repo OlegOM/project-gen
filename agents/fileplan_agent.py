@@ -43,6 +43,12 @@ def _backend_files(spec: Dict[str, Any]) -> List[PlanFile]:
                 PlanFile("backend/app/models/__init__.py", "pkg", [], []),
                 PlanFile("backend/app/routes/__init__.py", "pkg", [], []),
                 PlanFile("backend/app/workflows/__init__.py", "pkg", [], []),
+                PlanFile("backend/app/database/__init__.py", "pkg", [], []),
+                PlanFile("backend/app/repositories/__init__.py", "pkg", [], []),
+                PlanFile("backend/app/services/__init__.py", "pkg", [], []),
+                PlanFile("backend/app/database/connection.py", "database", [], ["Database connection and session management"]),
+                PlanFile("backend/app/database/base.py", "database", [], ["Base model and database configuration"]),
+                PlanFile("backend/app/database/migrations.py", "database", [], ["Database migration utilities"]),
                 PlanFile(
                     "tests/test_health.py",
                     "test",
@@ -64,33 +70,77 @@ def _backend_files(spec: Dict[str, Any]) -> List[PlanFile]:
             )
         for ent in spec.get("entities") or []:
             ename = ent["name"].lower()
-            files.append(
+            files.extend([
                 PlanFile(
                     f"backend/app/models/{ename}.py",
                     "model",
-                    [],
-                    [f"Model for {ent['name']}",],
-                )
-            )
-            files.append(
+                    ["backend/app/database/base.py"],
+                    [f"SQLAlchemy model for {ent['name']}"],
+                ),
+                PlanFile(
+                    f"backend/app/repositories/{ename}_repository.py",
+                    "repository",
+                    [f"backend/app/models/{ename}.py", "backend/app/database/connection.py"],
+                    [f"Repository pattern for {ent['name']} data access"],
+                ),
+                PlanFile(
+                    f"backend/app/services/{ename}_service.py",
+                    "service",
+                    [f"backend/app/repositories/{ename}_repository.py"],
+                    [f"Business logic service for {ent['name']}"],
+                ),
                 PlanFile(
                     f"backend/app/routes/{ename}s.py",
                     "api",
-                    [f"backend/app/models/{ename}.py"],
-                    [f"CRUD for {ent['name']}",],
+                    [f"backend/app/services/{ename}_service.py"],
+                    [f"FastAPI CRUD endpoints for {ent['name']}"],
+                ),
+                PlanFile(
+                    f"tests/test_{ename}_repository.py",
+                    "test",
+                    [f"backend/app/repositories/{ename}_repository.py"],
+                    [f"Repository tests for {ent['name']}"],
+                ),
+                PlanFile(
+                    f"tests/test_{ename}_service.py",
+                    "test",
+                    [f"backend/app/services/{ename}_service.py"],
+                    [f"Service tests for {ent['name']}"],
+                ),
+                PlanFile(
+                    f"tests/test_{ename}_routes.py",
+                    "test",
+                    [f"backend/app/routes/{ename}s.py"],
+                    [f"API endpoint tests for {ent['name']}"],
                 )
-            )
+            ])
 
         for wf in spec.get("workflows") or []:
             wname = wf.get("name", "").replace(" ", "_").lower()
-            files.append(
+            # Determine entity dependencies for workflows
+            entity_deps = []
+            for ent in spec.get("entities") or []:
+                ename = ent["name"].lower()
+                if any(ename in str(action).lower() for action in wf.get("actions", [])):
+                    entity_deps.extend([
+                        f"backend/app/services/{ename}_service.py",
+                        f"backend/app/repositories/{ename}_repository.py"
+                    ])
+            
+            files.extend([
                 PlanFile(
                     f"backend/app/workflows/{wname}.py",
                     "workflow",
-                    [],
-                    [f"Workflow for {wf.get('name','')}"],
+                    entity_deps,
+                    [f"Business workflow for {wf.get('name','')}"],
+                ),
+                PlanFile(
+                    f"tests/test_{wname}_workflow.py",
+                    "test",
+                    [f"backend/app/workflows/{wname}.py"],
+                    [f"Workflow tests for {wf.get('name','')}"],
                 )
-            )
+            ])
 
     return files
 

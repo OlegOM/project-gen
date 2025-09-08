@@ -189,6 +189,7 @@ def _heuristic_prd_to_spec(prd_text: str) -> Dict[str, Any]:
     return _apply_defaults(data, prd_text)
 
 def prd_to_spec(prd_text: str) -> Dict[str, Any]:
+    print (f'Generatingg SPEC from PRD')
     use_llm = os.getenv("USE_LLM","false").lower() == "true"
     if use_llm:
         try:
