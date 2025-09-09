@@ -3,6 +3,8 @@ import os, re, json, yaml, traceback
 from typing import Dict, Any, List
 from projectgen.agents.requirements_agent import extract_requirements
 from projectgen.agents.rules_agent import extract_rules
+from ..settings import settings
+
 
 _CTRL_CHARS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 _ZERO_WIDTH = re.compile(r"[\u200B-\u200F\u2028\u2029\u2060\uFEFF]")
@@ -140,7 +142,7 @@ def _llm_extract(prd_text: str) -> Dict[str, Any]:
     msgs = [{"role":"system","content":system},{"role":"user","content":user}]
     for _ in range(3):
         resp = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
+            model=settings.llm.model_spec_agent,
             messages=msgs,
             temperature=0,
             response_format={"type": "json_object"},

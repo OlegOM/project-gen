@@ -3,6 +3,7 @@ import os, re, json, yaml, traceback
 from typing import Any, Dict
 from pathlib import Path
 from jsonschema import validate, ValidationError
+from ..settings import settings
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "specs" / "SPEC_SCHEMA.json"
 
@@ -130,9 +131,9 @@ def _llm_prd_to_spec_data(prd_text: str) -> Dict[str, Any]:
     msgs = [{"role":"system","content":system},{"role":"user","content":user}]
     for _ in range(3):
         resp = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
+            model=settings.llm.model_spec_agent,
             messages=msgs,
-            temperature=0,
+            temperature=settings.llm.temperature,
             response_format={"type": "json_object"},
         )
         raw = resp["choices"][0]["message"]["content"]

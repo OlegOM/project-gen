@@ -1,6 +1,8 @@
 from __future__ import annotations
-import pathlib, json, re, os, traceback
+import pathlib, json, os, pathlib
+import traceback
 from typing import Dict, Any, List, Tuple
+from ..settings import settings
 from projectgen.executor.diff_healer import run_and_heal
 from pydantic import BaseModel, field_validator, ValidationInfo
 import re
@@ -189,14 +191,14 @@ Focus on creating production-ready, comprehensive specifications that will resul
 """
     
     r = openai.ChatCompletion.create(
-        model="gpt-4o",
+        model=settings.llm.model,
         messages=[{"role": "user", "content": step1_prompt}],
-        temperature=0,
+        temperature=settings.llm.temperature,
         response_format={"type": "json_object"},
     )
     return r["choices"][0]["message"]["content"]
 
-def _llm_workflow_code(flow: Dict[str, Any], reqs, rules, stacks, prd_text: str | None = None, entities: List[Dict[str, Any]] = None) -> str:
+def _llm_workflow_code(flow: Dict[str, Any], reqs, rules, stacks, prd_text: str | None = None, entities: List[Dict[str, Any]] = None) -> tuple[str, Dict[str, Any]]:
     """Step 2: Generate Python code using enhanced specifications"""
     import openai
     
@@ -246,11 +248,12 @@ Return ONLY the Python code without markdown formatting or explanations.
 """
         
         r = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model=settings.llm.model,
             messages=[{"role": "user", "content": step2_prompt}],
-            temperature=0,
+            temperature=settings.llm.temperature,
         )
-        return _strip_code_fences(r["choices"][0]["message"]["content"])
+        generated_code = _strip_code_fences(r["choices"][0]["message"]["content"])
+        return generated_code, enhanced_specs
         
     except Exception as e:
         traceback.print_exc()
@@ -269,11 +272,12 @@ Return ONLY the Python code without markdown formatting or explanations.
             "Return only Python code without explanations."
         )
         r = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model=settings.llm.model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0,
+            temperature=settings.llm.temperature,
         )
-        return _strip_code_fences(r["choices"][0]["message"]["content"])
+        fallback_code = _strip_code_fences(r["choices"][0]["message"]["content"])
+        return fallback_code, {}
 
 def _llm_generate_enhanced_route_prompt(ent: Dict[str, Any], reqs, rules, stacks, all_entities: List[Dict[str, Any]], prd_text: str | None = None) -> str:
     """Step 1: Generate sophisticated prompt with enhanced entity specifications"""
@@ -428,9 +432,9 @@ Focus on creating production-ready, comprehensive API specifications that will r
 """
     
     r = openai.ChatCompletion.create(
-        model="gpt-4o",
+        model=settings.llm.model,
         messages=[{"role": "user", "content": step1_prompt}],
-        temperature=0,
+        temperature=settings.llm.temperature,
         response_format={"type": "json_object"},
     )
     return r["choices"][0]["message"]["content"]
@@ -526,14 +530,14 @@ Focus on creating comprehensive service specifications that will result in high-
 """
     
     r = openai.ChatCompletion.create(
-        model="gpt-4o",
+        model=settings.llm.model,
         messages=[{"role": "user", "content": step1_prompt}],
-        temperature=0,
+        temperature=settings.llm.temperature,
         response_format={"type": "json_object"},
     )
     return r["choices"][0]["message"]["content"]
 
-def _llm_service_code(ent: Dict[str, Any], reqs, rules, stacks, prd_text: str | None = None, all_entities: List[Dict[str, Any]] = None) -> str:
+def _llm_service_code(ent: Dict[str, Any], reqs, rules, stacks, prd_text: str | None = None, all_entities: List[Dict[str, Any]] = None) -> tuple[str, Dict[str, Any]]:
     """Step 2: Generate service code using enhanced specifications"""
     import openai
     
@@ -601,17 +605,18 @@ Return ONLY the Python code without markdown formatting or explanations.
 """
         
         r = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model=settings.llm.model,
             messages=[{"role": "user", "content": step2_prompt}],
-            temperature=0,
+            temperature=settings.llm.temperature,
         )
-        return _strip_code_fences(r["choices"][0]["message"]["content"])
+        generated_code = _strip_code_fences(r["choices"][0]["message"]["content"])
+        return generated_code, enhanced_specs
         
     except Exception as e:
         traceback.print_exc()
         # Fallback to original simple approach
         name = ent["name"]
-        return f"""from typing import List, Optional, Dict, Any
+        fallback_code = f"""from typing import List, Optional, Dict, Any
 from ..repositories.{name.lower()}_repository import {name}Repository
 from ..models.{name.lower()} import {name}
 from fastapi import Depends, HTTPException
@@ -674,7 +679,315 @@ class {name}Service:
         pass
 """
 
-def _llm_route_code(ent: Dict[str, Any], reqs, rules, stacks, prd_text: str | None = None, all_entities: List[Dict[str, Any]] = None) -> str:
+def _llm_fill_placeholders(code: str, ent: Dict[str, Any], enhanced_specs: Dict[str, Any], stacks: Dict[str, Any], component_type: str = "component") -> str:
+    """Step 3: Fill in placeholder implementations with actual CRUD operations"""
+    import openai
+    import re
+    
+    # Check if code has placeholders that need filling
+    placeholder_patterns = [
+        r'pass\s*$',  # pass statements
+        r'# Placeholder',  # Placeholder comments
+        r'# TODO.*implement',  # TODO implement comments
+        r'#.*[Ss]imulate.*',  # Comments with "Simulate"
+        r'return\s+"(hashed_password|mock_token|fake_|test_|placeholder_)"',  # Common placeholder returns
+        r'#.*[Mm]ock.*implementation',  # Mock implementation comments
+        r'#.*[Tt]emporary.*implementation',  # Temporary implementation comments
+        r'#.*[Dd]ummy.*',  # Dummy implementation comments
+    ]
+    
+    has_placeholders = any(re.search(pattern, code, re.MULTILINE | re.IGNORECASE) for pattern in placeholder_patterns)
+    
+    if not has_placeholders:
+        return code
+    
+    print(f"🔄 LLM Step 3: Filling placeholders for '{ent['name']}' {component_type} ...")
+    
+    step3_prompt = f"""
+You are an expert FastAPI developer. The following code has placeholder implementations that need to be filled with actual working code.
+
+CURRENT CODE WITH PLACEHOLDERS:
+```python
+{code}
+```
+
+ENTITY DETAILS:
+{json.dumps(ent, indent=2)}
+
+ENHANCED SPECIFICATIONS:
+{json.dumps(enhanced_specs, indent=2)}
+
+TECH STACK:
+{json.dumps(stacks, indent=2)}
+
+Your task:
+1. Replace ALL placeholder implementations (pass statements, TODO comments, simulated implementations) with actual working code
+2. Replace ALL simulated/mock implementations with real ones:
+   - Functions with "# Simulate" comments returning hardcoded strings
+   - Password hashing functions returning "hashed_password" - use bcrypt or similar
+   - Token functions returning "mock_token" - generate actual JWT tokens
+   - Functions with "# Mock implementation" or "# Dummy" comments
+   - Any function returning hardcoded placeholder strings
+3. Implement complete CRUD operations with proper error handling
+4. Add database operations using SQLAlchemy or the specified ORM
+5. Include proper input validation and business rule enforcement
+6. Add comprehensive error handling with appropriate HTTP status codes
+7. Ensure all endpoints return proper response models
+8. Include authentication and authorization where needed
+9. Do not forget unitests and mockup placeholders handling
+
+Requirements for implementations:
+- Use async/await patterns for database operations
+- Include proper transaction management
+- Add input validation with detailed error messages
+- Implement pagination for list endpoints
+- Add proper logging for all operations
+- Include rate limiting and security measures
+- Handle edge cases and error scenarios
+- Handle unitests and mockup placeholders
+
+Return ONLY the complete Python code with all placeholders filled. Do not include markdown formatting.
+"""
+    
+    try:
+        r = openai.ChatCompletion.create(
+            model=settings.llm.model,
+            messages=[{"role": "user", "content": step3_prompt}],
+            temperature=settings.llm.temperature,
+        )
+        filled_code = _strip_code_fences(r["choices"][0]["message"]["content"])
+        print(f"✅ LLM Step 3: Placeholders filled for '{ent['name']}' {component_type}.")
+        
+        # Step 4: Fill remaining stub implementations (tests, security, monitoring, etc.)
+        step4_code = _llm_finalize_implementation(filled_code, ent, enhanced_specs, stacks, component_type)
+        return step4_code
+
+        # Step 5: Final pass to catch any remaining function stubs
+        # final_code = _llm_final_stub_cleanup(step4_code, ent, enhanced_specs, stacks, component_type)
+        # return final_code
+        
+    except Exception as e:
+        print(f"❌ LLM Step 3 failed for '{ent['name']}' {component_type}: {e}")
+        return code  # Return original code if Step 3 fails
+
+def _llm_finalize_implementation(code: str, ent: Dict[str, Any], enhanced_specs: Dict[str, Any], stacks: Dict[str, Any], component_type: str) -> str:
+    """Step 4: Fill remaining stub implementations (tests, security, monitoring, configuration)"""
+    import openai
+    import re
+    
+    # Check if code has remaining stubs that need implementation
+    stub_patterns = [
+        r'#\s*Placeholder.*',  # "# Placeholder for..." comments
+        r'#\s*TODO.*',         # "# TODO" comments
+        r'#\s*Implement.*',    # "# Implement..." comments
+        r'#\s*Performance.*',  # "# Performance..." comments
+        r'#\s*Security.*',     # "# Security..." comments
+        r'#\s*Monitoring.*',   # "# Monitoring..." comments
+        r'#\s*Configuration.*', # "# Configuration..." comments
+        r'def\s+\w+.*:\s*#.*\s*pass',  # Functions with comment + pass
+        r'async\s+def\s+\w+.*:\s*#.*\s*pass',  # Async functions with comment + pass
+        r'async\s+def\s+\w+.*:\s*#.*\s*return\s+(False|True|None|\[\]|\{\})',  # Async functions with placeholder returns
+        r'def\s+\w+.*:\s*#.*\s*return\s+(False|True|None|\[\]|\{\})',  # Functions with placeholder returns
+        r':\s*#.*\s*pass\s*$',  # Any block ending with comment + pass
+        r'#\s*Placeholder\s+for.*logic',  # "# Placeholder for ... logic"
+        r'async\s+def\s+.*:\s*#.*\s*return\s+False',  # Async functions returning False as placeholder
+        r'def\s+.*:\s*#.*\s*return\s+False',  # Functions returning False as placeholder
+        r'#.*logic\s*\n\s*pass',  # Comments mentioning "logic" followed by pass
+        r'#.*logic\s*\n\s*return\s+(False|None)',  # Comments mentioning "logic" followed by placeholder return
+        r'#.*[Ss]imulate.*',  # Comments with "Simulate"
+        r'return\s+"(hashed_password|mock_token|fake_|test_|placeholder_)"',  # Common placeholder returns
+        r'#.*[Mm]ock.*implementation',  # Mock implementation comments
+        r'#.*[Tt]emporary.*implementation',  # Temporary implementation comments
+        r'#.*[Dd]ummy.*',  # Dummy implementation comments
+    ]
+    
+    has_stubs = any(re.search(pattern, code, re.MULTILINE | re.IGNORECASE) for pattern in stub_patterns)
+    
+    if not has_stubs:
+        return code
+    
+    print(f"🔄 LLM Step 4: Finalizing stub implementations for '{ent['name']}' {component_type}...")
+    
+    step4_prompt = f"""
+You are an expert Python developer specializing in production-ready code. The following code has stub implementations that need to be completed with actual working implementations.
+
+CURRENT CODE WITH STUBS:
+```python
+{code}
+```
+
+ENTITY DETAILS:
+{json.dumps(ent, indent=2)}
+
+ENHANCED SPECIFICATIONS:
+{json.dumps(enhanced_specs, indent=2)}
+
+TECH STACK:
+{json.dumps(stacks, indent=2)}
+
+Your task is to complete ALL remaining stub implementations and placeholders:
+
+1. **Function Placeholders**: Replace ALL placeholder functions with actual implementations
+   - Functions ending with pass after placeholder comments
+   - Functions returning placeholder values like False, True, None, empty lists, empty dicts
+   - Async functions with placeholder logic
+   - Authentication and authorization functions
+   - Token generation and validation functions
+   - Business logic functions (like checking active orders, validating data, etc.)
+
+2. **Simulated/Mock Implementations**: Replace ALL simulated implementations with real ones
+   - Functions with "# Simulate" comments returning hardcoded strings
+   - Password hashing functions returning "hashed_password" - use bcrypt or similar
+   - Token functions returning "mock_token" - generate actual JWT tokens
+   - Functions with "# Mock implementation" comments
+   - Any function returning hardcoded placeholder strings like "fake_", "test_", "placeholder_"
+
+3. **Unit Tests**: Replace all pass statements in test functions with actual test implementations
+   - Use pytest fixtures and mocking where appropriate
+   - Test both success and failure scenarios
+   - Include edge cases and validation tests
+   - Use proper assertions and test data
+
+4. **Security Implementations**: Replace security comments with actual code
+   - Input validation and sanitization
+   - SQL injection prevention
+   - XSS protection measures
+   - Authentication and authorization checks
+   - Rate limiting implementation
+
+5. **Monitoring and Observability**: Replace monitoring comments with actual code
+   - Structured logging with proper levels
+   - Metrics collection (counters, timers, gauges)
+   - Distributed tracing setup
+   - Health check endpoints
+   - Error tracking and alerting
+
+6. **Performance Optimizations**: Replace performance comments with actual code
+   - Caching strategies (Redis, in-memory)
+   - Database query optimization
+   - Connection pooling
+   - Async/await patterns
+   - Response compression
+
+7. **Configuration Management**: Replace configuration comments with actual code
+   - Environment variable handling
+   - Configuration validation
+   - Default values and fallbacks
+   - Configuration classes/schemas
+
+Requirements:
+- Generate complete, working implementations for ALL stubs
+- Use production-ready patterns and best practices
+- Include proper error handling and logging
+- Make code testable and maintainable
+- Follow the specified tech stack requirements
+- Include proper imports and dependencies
+
+Return ONLY the complete Python code with all stubs implemented. Do not include markdown formatting.
+"""
+    
+    try:
+        r = openai.ChatCompletion.create(
+            model=settings.llm.model,
+            messages=[{"role": "user", "content": step4_prompt}],
+            temperature=settings.llm.temperature,
+        )
+        finalized_code = _strip_code_fences(r["choices"][0]["message"]["content"])
+        print(f"✅ LLM Step 4: Stub implementations completed for '{ent['name']}' {component_type}.")
+        return finalized_code
+        
+    except Exception as e:
+        print(f"❌ LLM Step 4 failed for '{ent['name']}' {component_type}: {e}")
+        return code  # Return original code if Step 4 fails
+
+def _llm_final_stub_cleanup(code: str, ent: Dict[str, Any], enhanced_specs: Dict[str, Any], stacks: Dict[str, Any], component_type: str) -> str:
+    """Step 5: Final aggressive pass to catch any remaining function stubs and placeholders"""
+    import openai
+    import re
+    
+    # More aggressive stub detection patterns
+    aggressive_patterns = [
+        r'def\s+\w+.*:\s*#.*\s*pass',  # Any function with comment + pass
+        r'async\s+def\s+\w+.*:\s*#.*\s*pass',  # Any async function with comment + pass
+        r'def\s+\w+.*:\s*#.*\s*return\s+(False|True|None)',  # Functions with placeholder returns
+        r'async\s+def\s+\w+.*:\s*#.*\s*return\s+(False|True|None)',  # Async functions with placeholder returns
+        r'#.*[Pp]laceholder.*',  # Any placeholder comment
+        r'#.*[Ll]ogic.*\s*\n\s*(pass|return\s+(False|True|None))',  # Logic comments with stub returns
+        r'#.*[Tt]oken.*generation.*\s*\n\s*pass',  # Token generation stubs
+        r'#.*[Cc]hecking.*orders.*\s*\n\s*return\s+False',  # Order checking stubs
+        r'#.*[Vv]alidation.*\s*\n\s*(pass|return\s+(False|True))',  # Validation stubs
+        r'#.*[Ss]imulate.*',  # Comments with "Simulate"
+        r'return\s+"[^"]*_(password|token|hash|key|id)"',  # Hardcoded placeholder strings
+        r'return\s+"(hashed_password|mock_token|fake_|test_|placeholder_)"',  # Common placeholder returns
+        r'#.*[Mm]ock.*implementation',  # Mock implementation comments
+        r'#.*[Tt]emporary.*implementation',  # Temporary implementation comments
+        r'#.*[Dd]ummy.*',  # Dummy implementation comments
+        r'return\s+"[^"]*".*#.*[Pp]laceholder',  # String returns with placeholder comments
+    ]
+    
+    has_aggressive_stubs = any(re.search(pattern, code, re.MULTILINE | re.IGNORECASE) for pattern in aggressive_patterns)
+    
+    if not has_aggressive_stubs:
+        return code
+    
+    print(f"🔄 LLM Step 5: Final stub cleanup for '{ent['name']}' {component_type}...")
+    
+    step5_prompt = f"""
+You are an expert Python developer. The following code still contains function stubs and placeholders that need complete implementations.
+
+CURRENT CODE WITH REMAINING STUBS:
+```python
+{code}
+```
+
+ENTITY: {ent['name']}
+COMPONENT TYPE: {component_type}
+
+Your task is to find and replace ALL remaining function stubs with complete, working implementations:
+
+1. **Replace ALL functions that have placeholder comments followed by pass**
+2. **Replace ALL functions that return placeholder values like False, True, None after placeholder comments**
+3. **Replace ALL simulated/mock implementations with real ones:**
+   - Functions with "# Simulate" comments returning hardcoded strings
+   - Password hashing functions returning "hashed_password" 
+   - Token functions returning "mock_token" or similar
+   - Functions with "# Mock implementation" or "# Dummy" comments
+   - Any function returning hardcoded placeholder strings
+4. **Implement actual business logic for:**
+   - Token generation and validation functions
+   - Authentication and authorization checks
+   - Database operations and queries
+   - Business rule validations
+   - Order processing and checking functions
+   - User management functions
+   - Any other domain-specific logic
+
+Requirements:
+- Generate complete, production-ready implementations
+- Use proper error handling and validation
+- Include appropriate imports and dependencies
+- Make functions return meaningful values based on their purpose
+- Use async/await patterns where appropriate
+- Include proper logging and monitoring
+
+Return ONLY the complete Python code with all stubs replaced by working implementations.
+"""
+    
+    try:
+        r = openai.ChatCompletion.create(
+            model=settings.llm.model,
+            messages=[{"role": "user", "content": step5_prompt}],
+            temperature=settings.llm.temperature,
+        )
+        cleaned_code = _strip_code_fences(r["choices"][0]["message"]["content"])
+        print(f"✅ LLM Step 5: Final stub cleanup completed for '{ent['name']}' {component_type}.")
+        return cleaned_code
+        
+    except Exception as e:
+        print(f"❌ LLM Step 5 failed for '{ent['name']}' {component_type}: {e}")
+        return code  # Return original code if Step 5 fails
+
+def _llm_route_code(ent: Dict[str, Any], reqs, rules, stacks, prd_text: str | None = None, all_entities: List[Dict[str, Any]] = None) -> tuple[str, Dict[str, Any]]:
     """Step 2: Generate FastAPI route code using enhanced specifications"""
     import openai
     
@@ -737,11 +1050,12 @@ Return ONLY the Python code without markdown formatting or explanations.
 """
         
         r = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model=settings.llm.model,
             messages=[{"role": "user", "content": step2_prompt}],
-            temperature=0,
+            temperature=settings.llm.temperature,
         )
-        return _strip_code_fences(r["choices"][0]["message"]["content"])
+        generated_code = _strip_code_fences(r["choices"][0]["message"]["content"])
+        return generated_code, enhanced_specs
         
     except Exception as e:
         traceback.print_exc()
@@ -756,11 +1070,12 @@ Return ONLY the Python code without markdown formatting or explanations.
             prompt += f"Original PRD:\n{prd_text}\n"
         prompt += "Use comments and TODOs if stack information is insufficient.\nReturn only Python code."
         r = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model=settings.llm.model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0,
+            temperature=settings.llm.temperature,
         )
-        return _strip_code_fences(r["choices"][0]["message"]["content"])
+        fallback_code = _strip_code_fences(r["choices"][0]["message"]["content"])
+        return fallback_code, {}
 
 def _render_schema(ent, rules):
     # Build BaseModel with validators for simple 'field >= 0', 'field in [...]'
@@ -815,7 +1130,7 @@ def generate_files(spec: Dict[str, Any], plan: Dict[str, Any], out_dir: str, prd
     name = spec.get("meta", {}).get("name", "project")
     hdr = "# Auto-generated file\n"
 
-    for item in plan["files"][:20]:
+    for item in plan["files"]:  # [:30]:
         print (f'Generating file: {item["path"]}')
         path = out / item["path"]
         code = "// TODO"
@@ -1275,7 +1590,13 @@ def _render_service(ent: Dict[str, Any], spec: Dict[str, Any], all_entities: Lis
     service_entities = _entities_for_service(spec, ent["name"])
     if use_llm:
         try:
-            return _llm_service_code(ent, reqs, rules, stacks, prd_text, service_entities)
+            generated_code, enhanced_specs = _llm_service_code(ent, reqs, rules, stacks, prd_text, service_entities)
+            if not settings.llm.fix_placeholders:
+                return generated_code
+
+            # Apply Step 3 placeholder filling if needed
+            final_code = _llm_fill_placeholders(generated_code, ent, enhanced_specs, stacks, "service")
+            return final_code
         except Exception as e:
             traceback.print_exc()
     
@@ -1429,7 +1750,13 @@ def _render_route(ent: Dict[str, Any], spec: Dict[str, Any], prd_text: str | Non
     if use_llm:
         try:
             all_entities = all_entities or []
-            return _llm_route_code(ent, reqs, rules, stacks, prd_text, all_entities)
+            generated_code, enhanced_specs = _llm_route_code(ent, reqs, rules, stacks, prd_text, all_entities)
+            if not settings.llm.fix_placeholders:
+                return generated_code
+
+            # Apply Step 3 placeholder filling if needed
+            final_code = _llm_fill_placeholders(generated_code, ent, enhanced_specs, stacks, "route")
+            return final_code
         except Exception as e:
             traceback.print_exc()
     
@@ -1471,7 +1798,13 @@ def _render_workflow(wf: Dict[str, Any], spec: Dict[str, Any], prd_text: str | N
     if use_llm:
         try:
             entities = entities or []
-            return _llm_workflow_code(wf, reqs, rules, stacks, prd_text, entities)
+            generated_code, enhanced_specs = _llm_workflow_code(wf, reqs, rules, stacks, prd_text, entities)
+            if not settings.llm.fix_placeholders:
+                return generated_code
+
+            # Apply Step 3 placeholder filling if needed
+            final_code = _llm_fill_placeholders(generated_code, wf, enhanced_specs, stacks, "workflow")
+            return final_code
         except Exception as e:
             traceback.print_exc()
     
